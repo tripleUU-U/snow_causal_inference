@@ -4,6 +4,10 @@ data/raw_data
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+pixi.lock
 
 # python 
 __pycache__
+
+# slurm
+slurm*
