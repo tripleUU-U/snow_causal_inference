@@ -11,3 +11,6 @@ __pycache__
 
 # slurm
 slurm*
+
+# vscode
+.vscode

@@ -2,8 +2,11 @@
 authors = ["Wenzel Uhlmann <wenzel.uhlmann@gmx.de>"]
 channels = ["conda-forge"]
 name = "snow_causal_inference"
-platforms = ["linux-64"]
 version = "0.1.0"
+platforms = [
+  "linux-64",
+  { name = "gpu", platform = "linux-64", cuda = "12.6" },
+]
 
 [tasks]
 
@@ -17,3 +20,23 @@ ipykernel = ">=7.3.0,<8"
 matplotlib = ">=3.11.1,<4"
 networkx = ">=3.6.1,<4"
 scikit-learn = ">=1.9.0,<2"
+numba = ">=0.67.0,<0.68"
+dcor = ">=0.7,<0.8"
+
+[feature.gpu]
+platforms = ["gpu"]
+
+[feature.gpu.dependencies]
+cuda-version = "12.6.*"
+pytorch-gpu = ">=2.5,<3"
+gpytorch = ">=1.15.2,<2"
+
+[feature.cpu]
+platforms = ["linux-64"]
+
+[feature.cpu.dependencies]
+pytorch-cpu = ">=2.5,<3"
+
+[environments]
+default = ["cpu"]
+gpu = ["gpu"]
