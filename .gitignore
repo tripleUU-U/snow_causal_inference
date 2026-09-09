@@ -3,6 +3,7 @@ data/raw_data
 
 # pixi environments
 .pixi/*
+pixi.lock
 !.pixi/config.toml
 pixi.lock
 
