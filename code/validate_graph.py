@@ -155,7 +155,7 @@ def run_CI_tests(
             X_parents = X_dict[X_tuple][1]
 
             Z = list(set(X_parents + Y_parents))
-            logger.info(f"Z: {Z}, consisting of\nX_pa: {X_parents}\nY_pa: {Y_parents}")
+            logger.info(f"\tZ: {Z}, consisting of\n\tX_pa: {X_parents}\n\tY_pa: {Y_parents}")
 
             # Run test.
             CI_test = CI_test_dict[CI_str]
