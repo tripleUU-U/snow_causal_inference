@@ -22,6 +22,7 @@ networkx = ">=3.6.1,<4"
 scikit-learn = ">=1.9.0,<2"
 numba = ">=0.67.0,<0.68"
 dcor = ">=0.7,<0.8"
+plotly = ">=7.0.0,<8"
 
 [feature.gpu]
 platforms = ["gpu"]

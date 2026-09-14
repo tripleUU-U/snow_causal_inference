@@ -13,6 +13,7 @@ from tigramite.independence_tests.parcorr import ParCorr
 from tigramite.independence_tests.cmiknn import CMIknn
 from tigramite.independence_tests.gpdc import GPDC
 from tigramite.independence_tests.parcorr_wls import ParCorrWLS
+from tigramite.independence_tests.oracle_conditional_independence import OracleCI
 
 logging.basicConfig(
     level=logging.INFO,              
@@ -36,6 +37,7 @@ def load_ts_df(
     .set_index("date")
     )
     return df_date_index
+
 
 def calculate_snowmelt(
         climate_ts_df: pd.DataFrame
@@ -118,6 +120,55 @@ def construct_vars_tg(
     return vars_tg
 
 
+def check_d_separations(
+        CI_config_dict: dict,
+        vars_tg: td.DataFrame
+) -> None:
+    """Check d-separations assumed in CI_config_dict with OracleCI."""
+
+    var_names = vars_tg.var_names
+
+    logger.info("Initializing OracleCI to test d-separations...")
+
+    oracle = OracleCI(graph=CI_config_dict["graph"])
+
+    for Y_tuple in CI_config_dict:
+
+        if isinstance(Y_tuple, str):
+            # Skip graph object.
+            continue
+
+        # Tuples of X as keys, and list holding CI_str, X_parents (and later CI_results) as values.
+        X_dict = CI_config_dict[Y_tuple]["X_dict"]
+
+        # Parents of Y (list of tuples).
+        Y_parents = CI_config_dict[Y_tuple]["Y_parents"]
+
+        logger.info(f"\n --- Checking d-separations for Y: {var_names[Y_tuple[0]]} t_{Y_tuple[1]} ---")
+
+        # Reset per Y, not once for the whole function.
+        d_separation = True
+
+        for X_tuple in X_dict:
+
+            # Same Z construction as in the actual CI-test run: union of X_parents and Y_parents.
+            X_parents = X_dict[X_tuple][1]
+            Z = list(set(X_parents + Y_parents))
+
+            logger.info(f"\tChecking X: {var_names[X_tuple[0]]} t_{X_tuple[1]} | Z: {Z}")
+
+            results = oracle.run_test(X=[X_tuple], Y=[Y_tuple], Z=Z, verbosity=0)
+
+            if not results == (0.0, 1.0):
+                logger.error(f"{Y_tuple} not d-separated from {X_tuple} given {Z}.")
+                d_separation = False
+
+        if not d_separation:
+            raise RuntimeError(f"d-separations for {Y_tuple} not correct.")
+        else:
+            logger.info(f"d-separations for {var_names[Y_tuple[0]]} t_{Y_tuple[1]} are valid.")
+
+
 def run_CI_tests(
         CI_config_dict: dict, 
         vars_tg: td.DataFrame,
@@ -127,7 +178,8 @@ def run_CI_tests(
 
     CI_test_dict = {
         "ParCorr" : ParCorr(),
-        "CMIknn" : CMIknn(knn=knn)
+        "GPDC" : GPDC(),
+        "CMIknn" : CMIknn(knn=knn),
     }
 
     var_names = vars_tg.var_names 
@@ -137,31 +189,42 @@ def run_CI_tests(
     # For each Y variable run test with chosen X given Z (parents).
     for Y_tuple in CI_results_dict:
 
+        if isinstance(Y_tuple, str): 
+            # Skip graph object.
+            continue
+
         # Tuples of Y as keys, and list holding CI_str, and later CI_results as values.
         X_dict = CI_results_dict[Y_tuple]["X_dict"]
 
         # Parents (list of tuples).
         Y_parents = CI_results_dict[Y_tuple]["Y_parents"]
 
-        logger.info(f"\n --- Running CI tests for {var_names[Y_tuple[0]]} t_{Y_tuple[1]}: ---")
+        logger.info(f"\n --- Running CI tests for Y: {var_names[Y_tuple[0]]} t_{Y_tuple[1]}: ---")
 
         for X_tuple in X_dict: 
 
             # Get the chosen CI test str.
             CI_str = X_dict[X_tuple][0]
-            logger.info(f"Using {CI_str} for {var_names[X_tuple[0]]} t_{X_tuple[1]}")
+            logger.info(f"Using {CI_str} for X: {var_names[X_tuple[0]]} t_{X_tuple[1]}")
 
             # Construct Z set from parents of X and Y. 
             X_parents = X_dict[X_tuple][1]
 
             Z = list(set(X_parents + Y_parents))
-            logger.info(f"\tZ: {Z}, consisting of\n\tX_pa: {X_parents}\n\tY_pa: {Y_parents}")
+            logger.info(f"\n\tZ: {Z}, consisting of\n\tX_pa: {X_parents}\n\tY_pa: {Y_parents}")
 
             # Run test.
             CI_test = CI_test_dict[CI_str]
             CI_test.set_dataframe(dataframe=vars_tg)
             results = CI_test.run_test(X=[X_tuple], Y=[Y_tuple], Z=Z, alpha_or_thres=0.01)
-            logger.info(f"\t {results}")
+
+            results_str = f"CI results {results}\n" 
+
+            if not results[2]: 
+                CI_passed_str = f" --> {var_names[Y_tuple[0]]} t_{Y_tuple[1]} _||_ {var_names[X_tuple[0]]} t_{X_tuple[1]} | Z\n"
+                results_str += CI_passed_str
+
+            logger.info(results_str)
 
             # Save results to list of variable. 
             X_dict[X_tuple].append(results)
@@ -182,8 +245,9 @@ def main(argv: list) -> None:
 
     CI_config_dict_path = Path(argv[0])
     knn = int(argv[1])
+    validate_d_sep = True if argv[2] == "val_d" else False
 
-    logger.info(f"Running CI test pipeline with {CI_config_dict_path}.")
+    logger.info(f"Running CI test pipeline with {CI_config_dict_path} and knn = {knn}.")
 
     # Load CI config.
     with open(CI_config_dict_path, "rb") as f: 
@@ -191,19 +255,30 @@ def main(argv: list) -> None:
 
     parent_dir_path = Path(CI_config_dict_path.parent)
 
-    out_path = parent_dir_path / "CI_results_dict_knn_{knn}.pkl"
+    out_path = parent_dir_path / f"CI_results_dict_knn_{knn}.pkl"
 
     # Load data.
     lamah_ce_path = Path("/home/wuhlmann/BA/data/raw_data/2_LamaH-CE_daily")
 
-    basin_id = int(parent_dir_path.name)
-
+    # Go up two, since each config lies in a draft dir.
+    basin_id = int(parent_dir_path.parent.name)
 
     vars_tg = construct_vars_tg(
         lamah_ce_path=lamah_ce_path,
         basin_id=basin_id
     )
 
+    if validate_d_sep:
+
+        try: 
+
+            check_d_separations(CI_config_dict=CI_config_dict, vars_tg=vars_tg)
+
+        except Exception as e: 
+
+            logger.info(e)
+
+            raise
 
     run_CI_tests(
         CI_config_dict=CI_config_dict,
