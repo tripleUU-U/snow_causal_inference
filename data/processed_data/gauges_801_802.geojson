@@ -1,0 +1,9 @@
+{
+"type": "FeatureCollection",
+"name": "gauges_801_802",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::3035" } },
+"features": [
+{ "type": "Feature", "properties": { "ID": 801, "govnr": 2327, "name": "Davos Kriegsmatte", "river": "Dischmabach", "area_gov": 42.9, "elev": 1668, "lon": 4311617, "lat": 2629122, "country": "CHE", "fedstate": "GRI", "region": "Rhine", "obsbeg_day": 1981, "obsbeg_hr": 1974, "obsend": 0, "gaps_pre": 0.0, "gaps_post": 0.0, "area_ratio": 1.0, "nrs_euhyd": "RL26004726", "nrs_rivat": 20461429, "typimpact": "-", "diur_art": 0, "diur_glac": 1, "degimpact": "u", "dist_hup": 10.8, "dist_hdn": 11.2, "elev_diff": 181, "strm_slope": 16.2, "HIERARCHY": 1, "NEXTDOWNID": 802 }, "geometry": { "type": "Point", "coordinates": [ 4311617.0, 2629122.0 ] } },
+{ "type": "Feature", "properties": { "ID": 802, "govnr": 2355, "name": "Davos Frauenkirch", "river": "Landwasser", "area_gov": 184.0, "elev": 1487, "lon": 4304964, "lat": 2627170, "country": "CHE", "fedstate": "GRI", "region": "Rhine", "obsbeg_day": 1981, "obsbeg_hr": 1974, "obsend": 0, "gaps_pre": 0.0, "gaps_post": 0.0, "area_ratio": 0.999, "nrs_euhyd": "RL26004484", "nrs_rivat": 20461169, "typimpact": "E", "diur_art": 0, "diur_glac": 0, "degimpact": "s", "dist_hup": 22.0, "dist_hdn": 23.5, "elev_diff": 650, "strm_slope": 27.7, "HIERARCHY": 2, "NEXTDOWNID": 803 }, "geometry": { "type": "Point", "coordinates": [ 4304964.0, 2627170.0 ] } }
+]
+}
