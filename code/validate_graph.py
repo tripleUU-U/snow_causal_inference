@@ -1,6 +1,7 @@
 import pickle 
 import logging
 import time
+import datetime
 import sys
 
 import numpy as np
@@ -97,13 +98,13 @@ def construct_vars_tg(
     climate_ts_df = calculate_snowmelt(climate_ts_df=climate_ts_df)
 
     # Select only relvant climate vars.
-    climate_vars_df = climate_ts_df.loc[:, ["2m_temp_mean", "prec", "total_et", "volsw_123", "snowmelt"]]
+    climate_vars_df = climate_ts_df.loc[:, ["surf_net_solar_rad_mean", "2m_temp_mean", "prec", "total_et", "volsw_123", "snowmelt"]]
 
     # Add discharge
     vars_df = pd.concat([climate_vars_df, q_ts_df["qobs"]], axis=1)
 
     # Rename for easier access.
-    vars_df.columns = ["TEMP", "P", "ET", "SM", "SNO", "Q"]
+    vars_df.columns = ["RAD", "TEMP", "P", "ET", "SM", "SNO", "Q"]
 
     # Remove missing.
     vars_df = vars_df.dropna()
@@ -119,10 +120,10 @@ def construct_vars_tg(
 
     return vars_tg
 
-
 def check_d_separations(
         CI_config_dict: dict,
-        vars_tg: td.DataFrame
+        vars_tg: td.DataFrame, 
+        use_Pa_X: bool
 ) -> None:
     """Check d-separations assumed in CI_config_dict with OracleCI."""
 
@@ -152,8 +153,12 @@ def check_d_separations(
         for X_tuple in X_dict:
 
             # Same Z construction as in the actual CI-test run: union of X_parents and Y_parents.
-            X_parents = X_dict[X_tuple][1]
-            Z = list(set(X_parents + Y_parents))
+            X_parents = X_dict[X_tuple]
+
+            if use_Pa_X:
+                Z = list(set(Y_parents + X_parents))
+            else: 
+                Z = Y_parents
 
             logger.info(f"\tChecking X: {var_names[X_tuple[0]]} t_{X_tuple[1]} | Z: {Z}")
 
@@ -172,15 +177,9 @@ def check_d_separations(
 def run_CI_tests(
         CI_config_dict: dict, 
         vars_tg: td.DataFrame,
-        knn: int,
+        use_Pa_X: bool,
         out_path: Path
 ) -> None: 
-
-    CI_test_dict = {
-        "ParCorr" : ParCorr(),
-        "GPDC" : GPDC(),
-        "CMIknn" : CMIknn(knn=knn),
-    }
 
     var_names = vars_tg.var_names 
 
@@ -204,22 +203,26 @@ def run_CI_tests(
         for X_tuple in X_dict: 
 
             # Get the chosen CI test str.
-            CI_str = X_dict[X_tuple][0]
-            logger.info(f"Using {CI_str} for X: {var_names[X_tuple[0]]} t_{X_tuple[1]}")
+            logger.info(f"Testing CI for X: {var_names[X_tuple[0]]} t_{X_tuple[1]}")
 
-            # Construct Z set from parents of X and Y. 
-            X_parents = X_dict[X_tuple][1]
+            # Construct Z set from parents of X and Y. Dont because CMIknn handles autocorrelation of X.
+            X_parents = X_dict[X_tuple]
 
-            Z = list(set(X_parents + Y_parents))
-            logger.info(f"\n\tZ: {Z}, consisting of\n\tX_pa: {X_parents}\n\tY_pa: {Y_parents}")
+            if use_Pa_X:
+                Z = list(set(Y_parents + X_parents))
+            else: 
+                Z = Y_parents
+
+            logger.info(f"\n\tZ: {Z} (incl Pa_X = {use_Pa_X})")
 
             # Run test.
-            CI_test = CI_test_dict[CI_str]
+            CI_test = CMIknn(knn=50) 
             CI_test.set_dataframe(dataframe=vars_tg)
             results = CI_test.run_test(X=[X_tuple], Y=[Y_tuple], Z=Z, alpha_or_thres=0.01)
 
             results_str = f"CI results {results}\n" 
 
+            # Check if p > alpha
             if not results[2]: 
                 CI_passed_str = f" --> {var_names[Y_tuple[0]]} t_{Y_tuple[1]} _||_ {var_names[X_tuple[0]]} t_{X_tuple[1]} | Z\n"
                 results_str += CI_passed_str
@@ -243,19 +246,22 @@ def run_CI_tests(
 
 def main(argv: list) -> None: 
 
-    CI_config_dict_path = Path(argv[0])
-    knn = int(argv[1])
-    validate_d_sep = True if argv[2] == "val_d" else False
-
-    logger.info(f"Running CI test pipeline with {CI_config_dict_path} and knn = {knn}.")
-
     # Load CI config.
+    CI_config_dict_path = Path(argv[0])
+
     with open(CI_config_dict_path, "rb") as f: 
         CI_config_dict = pickle.load(f)
 
+    validate_d_sep = CI_config_dict["val_d"]
+    use_Pa_X = CI_config_dict["use_Pa_X"]
+
+    logger.info(f"Running CI test pipeline with {CI_config_dict_path} with val_d = {validate_d_sep} and use_Pa_X = {use_Pa_X}.")
+
     parent_dir_path = Path(CI_config_dict_path.parent)
 
-    out_path = parent_dir_path / f"CI_results_dict_knn_{knn}.pkl"
+    ts = datetime.datetime.now().strftime('%d-%m-%Y_%H:%M:%S')
+
+    out_path = parent_dir_path / f"CI_results_dict_{ts}.pkl"
 
     # Load data.
     lamah_ce_path = Path("/home/wuhlmann/BA/data/raw_data/2_LamaH-CE_daily")
@@ -272,7 +278,7 @@ def main(argv: list) -> None:
 
         try: 
 
-            check_d_separations(CI_config_dict=CI_config_dict, vars_tg=vars_tg)
+            check_d_separations(CI_config_dict=CI_config_dict, vars_tg=vars_tg, use_Pa_X=use_Pa_X)
 
         except Exception as e: 
 
@@ -283,7 +289,7 @@ def main(argv: list) -> None:
     run_CI_tests(
         CI_config_dict=CI_config_dict,
         vars_tg=vars_tg,
-        knn=knn,
+        use_Pa_X=use_Pa_X,
         out_path=out_path
     )
 

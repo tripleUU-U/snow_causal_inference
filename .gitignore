@@ -16,3 +16,7 @@ slurm*
 
 # vscode
 .vscode
+
+# archive 
+code/archive
+experiments/802/archive
