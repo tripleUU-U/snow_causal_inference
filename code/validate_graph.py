@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from pathlib import Path
+from typing import Optional
 
 import tigramite.data_processing as td
 from tigramite.independence_tests.parcorr import ParCorr
@@ -84,7 +85,8 @@ def calculate_snowmelt(
 
 def construct_vars_tg(
         lamah_ce_path: Path, 
-        basin_id: int
+        basin_id: int,
+        upstream_basin_id: Optional[int] = None
 ) -> pd.DataFrame: 
 
     # Load df's. 
@@ -103,8 +105,24 @@ def construct_vars_tg(
     # Add discharge
     vars_df = pd.concat([climate_vars_df, q_ts_df["qobs"]], axis=1)
 
+    # Add Q_in if available.
+    if upstream_basin_id: 
+
+        q_upstream_ts_path = lamah_ce_path / f"D_gauges/2_timeseries/daily/ID_{upstream_basin_id}.csv"
+
+        q_upstream_ts_df = load_ts_df(q_upstream_ts_path)
+
+        logger.info(f"Loaded upstream basin data from: {q_upstream_ts_path}")
+
+        vars_df = pd.concat([vars_df, q_upstream_ts_df["qobs"]], axis=1)
+
+        # might need to be adapted for multiple upstream basins. 
+    
     # Rename for easier access.
-    vars_df.columns = ["RAD", "TEMP", "P", "ET", "SM", "SNO", "Q"]
+    if not upstream_basin_id:
+        vars_df.columns = ["RAD", "TEMP", "P", "ET", "SM", "SNO", "Q"]
+    else:
+        vars_df.columns = ["RAD", "TEMP", "P", "ET", "SM", "SNO", "Q", "Q_i"]
 
     # Remove missing.
     vars_df = vars_df.dropna()
@@ -254,6 +272,8 @@ def main(argv: list) -> None:
 
     validate_d_sep = CI_config_dict["val_d"]
     use_Pa_X = CI_config_dict["use_Pa_X"]
+    basin_id = CI_config_dict["basin_id"]
+    upstream_basin_id = CI_config_dict["upstream_basin_id"]
 
     logger.info(f"Running CI test pipeline with {CI_config_dict_path} with val_d = {validate_d_sep} and use_Pa_X = {use_Pa_X}.")
 
@@ -266,12 +286,10 @@ def main(argv: list) -> None:
     # Load data.
     lamah_ce_path = Path("/home/wuhlmann/BA/data/raw_data/2_LamaH-CE_daily")
 
-    # Go up two, since each config lies in a draft dir.
-    basin_id = int(parent_dir_path.parent.name)
-
     vars_tg = construct_vars_tg(
         lamah_ce_path=lamah_ce_path,
-        basin_id=basin_id
+        basin_id=basin_id,
+        upstream_basin_id=upstream_basin_id
     )
 
     if validate_d_sep:
